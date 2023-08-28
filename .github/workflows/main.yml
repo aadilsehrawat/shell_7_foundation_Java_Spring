@@ -1,50 +1,30 @@
-trigger:
-- main  # Change this to the name of your main branch
+name: ci
 
-pr:
-- '*'
+on:
+  push:
+    branches:
+      - "main"
 
-pool:
-  vmImage: 'ubuntu-latest'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-steps:
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '3.x'
-    addToPath: true
+      -
+        name: Pull Docker Image
+        run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/aadils-docker-image:latest
 
-- script: |
-    echo Setting up Docker...
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-  displayName: 'Install Docker'
+      -
+        name: Deploy to Azure Web App
+        env:
+          AZURE_WEBAPP_NAME: StreamlineSolutions # Replace with your Azure Web App name
+          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/aadils-docker-image:latest
+        run: |
+          az webapp config container set --name $AZURE_WEBAPP_NAME --resource-group newrg --docker-custom-image-name $DOCKER_IMAGE --docker-registry-server-url https://index.docker.io
 
-- script: |
-    echo Logging in to DockerHub...
-    docker login -u aadilsehrawat -p $(DOCKERHUB_PASSWORD)
-  displayName: 'Docker Login'
-
-- script: |
-    echo Pulling Docker image...
-    docker pull aadilsehrawat/aadils-docker-image
-  displayName: 'Docker Pull'
-
-- script: |
-    echo Building Docker image...
-    docker build -t my-webapp .
-  displayName: 'Docker Build'
-
-- script: |
-    echo Pushing Docker image...
-    docker tag my-webapp aadilsehrawat/aadils-docker-image:latest
-    docker push aadilsehrawat/aadils-docker-image:latest
-  displayName: 'Docker Push'
-
-- task: AzureRmWebAppDeployment@4
-  inputs:
-    ConnectionType: 'AzureRM'
-    appType: 'webAppLinux'
-    WebAppName: 'StreamlineSolutions'
-    packageForLinux: $(Pipeline.Workspace)
-    RuntimeStack: 'DOCKER|latest'
-    StartupCommand: ''
